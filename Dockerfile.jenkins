@@ -1,0 +1,27 @@
+FROM jenkins/jenkins:lts
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    python3-setuptools \
+    python3-wheel \
+    build-essential \
+    ca-certificates \
+    openssl \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && update-ca-certificates --fresh
+
+RUN pip3 install --break-system-packages --no-cache-dir pybind11 \
+    && python3 -m pip install --upgrade certifi --break-system-packages
+
+RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
+
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+USER jenkins
