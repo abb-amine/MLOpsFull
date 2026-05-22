@@ -14,7 +14,7 @@ pipeline {
                 sh 'pip install --retries 5 --timeout 180 -r requirements.txt --break-system-packages'
                 sh 'pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu --trusted-host download.pytorch.org --break-system-packages'
                 sh 'pip install -e . pytest-cov flake8 black isort --break-system-packages'
-                sh 'apt-get update && apt-get install -y docker.io'
+                sh 'curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.0.3.tgz | tar xz -C /tmp && install -m 755 /tmp/docker/docker "${HOME}/.local/bin/docker" && rm -rf /tmp/docker'
             }
         }
 
