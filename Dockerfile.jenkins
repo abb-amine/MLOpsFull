@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     docker.io \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3 /usr/bin/python \
-    && update-ca-certificates --fresh
+    && update-ca-certificates --fresh \
+    && usermod -aG docker jenkins
 
 RUN pip3 install --break-system-packages --no-cache-dir pybind11 \
     && python3 -m pip install --upgrade certifi --break-system-packages
