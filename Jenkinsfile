@@ -15,6 +15,7 @@ pipeline {
                 sh 'pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu --trusted-host download.pytorch.org --break-system-packages'
                 sh 'pip install -e . pytest-cov flake8 black isort --break-system-packages'
                 sh 'curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.0.3.tgz | tar xz -C /tmp && install -m 755 /tmp/docker/docker "${HOME}/.local/bin/docker" && rm -rf /tmp/docker'
+                sh 'sudo chmod 666 /var/run/docker.sock 2>/dev/null; ls -la /var/run/docker.sock'
             }
         }
 
@@ -34,7 +35,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'docker build -t madewithml .'
+                sh 'sudo chmod 666 /var/run/docker.sock 2>/dev/null; docker build -t madewithml .'
             }
         }
     }
