@@ -1,4 +1,4 @@
-.PHONY: install lint format test docker-build docker-run clean
+.PHONY: install lint format test docker-build docker-run clean jenkins-build jenkins-run jenkins-logs jenkins-password jenkins-stop
 
 install:
 	pip install --upgrade pip
@@ -35,6 +35,35 @@ docker-shell:
 		-v $(PWD)/logs:/app/logs \
 		--entrypoint /bin/bash \
 		madewithml
+
+# Jenkins
+jenkins-build:
+	docker build -t madewithml-jenkins -f Dockerfile.jenkins .
+
+jenkins-run:
+	mkdir -p efs logs
+	docker run -d \
+		--name jenkins \
+		--restart unless-stopped \
+		-p 8080:8080 \
+		-p 50000:50000 \
+		-v jenkins_home:/var/jenkins_home \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(PWD):/workspace \
+		-e DOCKER_HOST=unix:///var/run/docker.sock \
+		madewithml-jenkins
+
+jenkins-logs:
+	docker logs -f jenkins
+
+jenkins-password:
+	docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+
+jenkins-stop:
+	docker stop jenkins && docker rm jenkins
+
+jenkins-shell:
+	docker exec -it -u root jenkins /bin/bash
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

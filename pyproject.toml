@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "madewithml"
 version = "0.1.0"
 description = "MLOps pipeline for classifying ML project tags using SciBERT"
-readme = "MLOPS_JOURNAL.md"
+
 requires-python = ">=3.9"
 authors = [
     {name = "MLOps Student"},
@@ -28,6 +28,9 @@ dependencies = [
     "torch",
     "transformers",
 ]
+
+[tool.setuptools.packages.find]
+include = ["madewithml*"]
 
 [tool.black]
 line-length = 120
