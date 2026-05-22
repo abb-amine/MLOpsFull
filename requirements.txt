@@ -1,42 +1,38 @@
 # Core
 hyperopt==0.2.7
-matplotlib==3.7.1
-mlflow==2.3.1
-nltk==3.8.1
-numpy==1.24.3
+matplotlib==3.10.1
+mlflow==2.20.4
+nltk==3.9.1
+numpy==2.2.4
 numpyencoder==0.3.0
-pandas==2.0.1
-python-dotenv==1.0.0
-ray[air]==2.7.0
-scikit-learn==1.2.2
+pandas==2.2.3
+python-dotenv==1.1.0
+scikit-learn==1.7.1
 snorkel==0.9.9
-SQLAlchemy==1.4.48
-torch==2.0.0
-transformers==4.28.1
+SQLAlchemy==2.0.40
+torch==2.6.0
+transformers==4.52.5
 
 # Notebook
 cleanlab==2.3.1
-jupyterlab==3.6.3
+jupyterlab==4.3.6
 lime==0.2.0.1
-seaborn==0.12.2
-wordcloud==1.9.2
+seaborn==0.13.2
+wordcloud==1.9.4
 
 # API
-fastapi==0.95.2
-typer==0.9.0
+fastapi==0.115.12
+typer==0.15.2
 
 # Styling
-black==23.3.0
-flake8==6.0.0
-isort==5.12.0
+black==25.1.0
+flake8==7.2.0
+isort==6.0.1
 
 # Testing
-great-expectations==0.16.5
-pytest==7.3.1
-pytest-cov==4.0.0
+great-expectations==0.18.24
+pytest==8.3.5
+pytest-cov==6.1.1
 
 # Development
-pre-commit==3.2.2
-
-# Deployment
-anyscale==0.5.131
+pre-commit==4.2.0
