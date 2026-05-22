@@ -41,15 +41,17 @@ jenkins-build:
 	docker build -t madewithml-jenkins -f Dockerfile.jenkins .
 
 jenkins-run:
+	-docker stop jenkins && docker rm jenkins
 	mkdir -p efs logs
 	docker run -d \
 		--name jenkins \
 		--restart unless-stopped \
-		-p 8080:8080 \
+		-p 8081:8080 \
 		-p 50000:50000 \
 		-v jenkins_home:/var/jenkins_home \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(PWD):/workspace \
+		--group-add "$(shell stat -c '%g' /var/run/docker.sock)" \
 		-e DOCKER_HOST=unix:///var/run/docker.sock \
 		madewithml-jenkins
 

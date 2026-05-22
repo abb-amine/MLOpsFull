@@ -9,7 +9,7 @@ pandas==2.2.3
 python-dotenv==1.1.0
 scikit-learn==1.7.1
 snorkel==0.9.9
-    SQLAlchemy==2.0.40
+SQLAlchemy==2.0.40
 transformers==4.52.4
 
 # Notebook
