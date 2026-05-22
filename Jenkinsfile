@@ -14,6 +14,7 @@ pipeline {
                 sh 'pip install --retries 5 --timeout 180 -r requirements.txt --break-system-packages'
                 sh 'pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu --trusted-host download.pytorch.org --break-system-packages'
                 sh 'pip install -e . pytest-cov flake8 black isort --break-system-packages'
+                sh 'apt-get update && apt-get install -y docker.io'
             }
         }
 
@@ -32,12 +33,6 @@ pipeline {
         }
 
         stage('Build') {
-            agent {
-                docker {
-                    image 'docker:latest'
-                    args '-v /var/run/docker.sock:/var/run/docker.sock'
-                }
-            }
             steps {
                 sh 'docker build -t madewithml .'
             }
