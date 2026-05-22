@@ -10,7 +10,7 @@ pipeline {
             steps {
                 checkout scm
                 sh 'pip install --upgrade pip --break-system-packages'
-                sh 'pip install -r requirements.txt --break-system-packages'
+                sh 'pip install --retries 5 --timeout 180 -r requirements.txt --break-system-packages'
                 sh 'pip install -e . pytest-cov flake8 black isort --break-system-packages'
             }
         }
