@@ -27,7 +27,7 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh 'pytest tests/ -v -m "not requires_scibert" --cov=madewithml --cov-report=xml --cov-report=term'
+                sh 'mkdir -p test-results && pytest tests/ -v -m "not requires_scibert" --cov=madewithml --cov-report=xml --cov-report=term --junitxml=test-results/results.xml'
             }
         }
 
