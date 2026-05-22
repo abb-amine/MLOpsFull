@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "madewithml"
+version = "0.1.0"
+description = "MLOps pipeline for classifying ML project tags using SciBERT"
+readme = "MLOPS_JOURNAL.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "MLOps Student"},
+]
+dependencies = [
+    "hyperopt",
+    "ipywidgets",
+    "matplotlib",
+    "mlflow",
+    "nltk",
+    "numpy",
+    "numpyencoder",
+    "pandas",
+    "python-dotenv",
+    "ray[air]",
+    "scikit-learn",
+    "snorkel",
+    "SQLAlchemy",
+    "torch",
+    "transformers",
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py39"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E203", "W503"]
+exclude = [".venv", "__pycache__", "build", "dist"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+markers = [
+    "requires_scibert: tests that need SciBERT model download",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+]
+
+[tool.coverage.run]
+source = ["madewithml"]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+fail_under = 30
+show_missing = true
+skip_covered = true

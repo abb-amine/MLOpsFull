@@ -8,9 +8,11 @@ from ray.data import Dataset
 from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer
 
-from madewithml.config import STOPWORDS
+from madewithml.config import STOPWORDS, logger
+from madewithml.log_utils import log_timing
 
 
+@log_timing(logger)
 def load_data(dataset_loc: str, num_samples: int = None) -> Dataset:
     """Load data from source into a Ray Dataset.
 
@@ -22,11 +24,23 @@ def load_data(dataset_loc: str, num_samples: int = None) -> Dataset:
         Dataset: Our dataset represented by a Ray Dataset.
     """
     ds = ray.data.read_csv(dataset_loc)
+    total = ds.count()
     ds = ds.random_shuffle(seed=1234)
-    ds = ray.data.from_items(ds.take(num_samples)) if num_samples else ds
+    if num_samples:
+        ds = ray.data.from_items(ds.take(num_samples))
+        logger.info(
+            f"Loaded {num_samples}/{total} samples from {dataset_loc}",
+            extra={"extra_data": {"source": dataset_loc, "total": total, "sampled": num_samples}},
+        )
+    else:
+        logger.info(
+            f"Loaded {total} samples from {dataset_loc}",
+            extra={"extra_data": {"source": dataset_loc, "total": total}},
+        )
     return ds
 
 
+@log_timing(logger)
 def stratify_split(
     ds: Dataset,
     stratify: str,
@@ -63,7 +77,10 @@ def stratify_split(
         return df[df["_split"] == split].drop("_split", axis=1)
 
     # Train, test split with stratify
-    grouped = ds.groupby(stratify).map_groups(_add_split, batch_format="pandas")  # group by each unique value in the column we want to stratify on
+    total = ds.count()
+    grouped = ds.groupby(stratify).map_groups(
+        _add_split, batch_format="pandas"
+    )  # group by each unique value in the column we want to stratify on
     train_ds = grouped.map_batches(_filter_split, fn_kwargs={"split": "train"}, batch_format="pandas")  # combine
     test_ds = grouped.map_batches(_filter_split, fn_kwargs={"split": "test"}, batch_format="pandas")  # combine
 
@@ -71,6 +88,12 @@ def stratify_split(
     train_ds = train_ds.random_shuffle(seed=seed)
     test_ds = test_ds.random_shuffle(seed=seed)
 
+    train_count = train_ds.count()
+    test_count = test_ds.count()
+    logger.info(
+        f"Stratified split: train={train_count}, test={test_count} (test_size={test_size})",
+        extra={"extra_data": {"total": total, "train": train_count, "test": test_count, "test_size": test_size}},
+    )
     return train_ds, test_ds
 
 
@@ -87,6 +110,9 @@ def clean_text(text: str, stopwords: List = STOPWORDS) -> str:
     # Lower
     text = text.lower()
 
+    # Remove links before punctuation spacing
+    text = re.sub(r"http\S+", "", text)
+
     # Remove stopwords
     pattern = re.compile(r"\b(" + r"|".join(stopwords) + r")\b\s*")
     text = pattern.sub(" ", text)
@@ -96,7 +122,6 @@ def clean_text(text: str, stopwords: List = STOPWORDS) -> str:
     text = re.sub("[^A-Za-z0-9]+", " ", text)  # remove non alphanumeric chars
     text = re.sub(" +", " ", text)  # remove multiple spaces
     text = text.strip()  # strip white space at the ends
-    text = re.sub(r"http\S+", "", text)  # remove links
 
     return text
 
@@ -131,6 +156,16 @@ def preprocess(df: pd.DataFrame, class_to_index: Dict) -> Dict:
     df = df[["text", "tag"]]  # rearrange columns
     df["tag"] = df["tag"].map(class_to_index)  # label encoding
     outputs = tokenize(df)
+    logger.info(
+        f"Preprocessed {len(df)} samples, ids shape={outputs['ids'].shape}",
+        extra={
+            "extra_data": {
+                "samples": len(df),
+                "ids_shape": list(outputs["ids"].shape),
+                "classes": list(class_to_index.keys()),
+            }
+        },  # noqa: E501
+    )
     return outputs
 
 
@@ -141,11 +176,21 @@ class CustomPreprocessor:
         self.class_to_index = class_to_index or {}  # mutable defaults
         self.index_to_class = {v: k for k, v in self.class_to_index.items()}
 
+    @log_timing(logger)
     def fit(self, ds):
         tags = ds.unique(column="tag")
         self.class_to_index = {tag: i for i, tag in enumerate(tags)}
         self.index_to_class = {v: k for k, v in self.class_to_index.items()}
+        logger.info(
+            f"Fitted preprocessor with {len(tags)} tags: {tags}",
+            extra={"extra_data": {"tags_found": len(tags), "class_to_index": self.class_to_index}},
+        )
         return self
 
+    @log_timing(logger)
     def transform(self, ds):
+        logger.info(
+            "Transforming dataset",
+            extra={"extra_data": {"count": ds.count(), "class_to_index": self.class_to_index}},
+        )
         return ds.map_batches(preprocess, fn_kwargs={"class_to_index": self.class_to_index}, batch_format="pandas")

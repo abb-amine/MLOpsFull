@@ -14,6 +14,7 @@ from typing_extensions import Annotated
 
 from madewithml import predict, utils
 from madewithml.config import logger
+from madewithml.log_utils import log_timing
 from madewithml.predict import TorchPredictor
 
 # Initialize Typer CLI app
@@ -40,7 +41,9 @@ def get_overall_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict:  # prag
     return overall_metrics
 
 
-def get_per_class_metrics(y_true: np.ndarray, y_pred: np.ndarray, class_to_index: Dict) -> Dict:  # pragma: no cover, eval workload
+def get_per_class_metrics(
+    y_true: np.ndarray, y_pred: np.ndarray, class_to_index: Dict
+) -> Dict:  # pragma: no cover, eval workload
     """Get per class performance metrics.
 
     Args:
@@ -60,7 +63,9 @@ def get_per_class_metrics(y_true: np.ndarray, y_pred: np.ndarray, class_to_index
             "f1": metrics[2][i],
             "num_samples": np.float64(metrics[3][i]),
         }
-    sorted_per_class_metrics = OrderedDict(sorted(per_class_metrics.items(), key=lambda tag: tag[1]["f1"], reverse=True))
+    sorted_per_class_metrics = OrderedDict(
+        sorted(per_class_metrics.items(), key=lambda tag: tag[1]["f1"], reverse=True)
+    )
     return sorted_per_class_metrics
 
 
@@ -136,6 +141,9 @@ def evaluate(
     predictions = preprocessed_ds.map_batches(predictor).take_all()
     y_pred = np.array([d["output"] for d in predictions])
 
+    eval_extra = {"run_id": run_id, "dataset": dataset_loc}
+    logger.info(f"Evaluating run_id={run_id} on dataset={dataset_loc}", extra={"extra_data": eval_extra})
+
     # Metrics
     metrics = {
         "timestamp": datetime.datetime.now().strftime("%B %d, %Y %I:%M:%S %p"),
@@ -144,11 +152,32 @@ def evaluate(
         "per_class": get_per_class_metrics(y_true=y_true, y_pred=y_pred, class_to_index=preprocessor.class_to_index),
         "slices": get_slice_metrics(y_true=y_true, y_pred=y_pred, ds=ds),
     }
-    logger.info(json.dumps(metrics, indent=2))
+    logger.info(
+        json.dumps(metrics, indent=2),
+        extra={"extra_data": {"overall": metrics.get("overall", {}), "per_class": metrics.get("per_class", {})}},
+    )
     if results_fp:  # pragma: no cover, saving results
         utils.save_dict(d=metrics, path=results_fp)
+
+    # MLflow logging
+    import mlflow
+
+    if mlflow.active_run():
+        overall = metrics.get("overall", {})
+        mlflow.log_metrics({f"overall/{k}": v for k, v in overall.items() if isinstance(v, (int, float))})
+
     return metrics
 
 
 if __name__ == "__main__":  # pragma: no cover, checked during evaluation workload
     app()
+
+
+@app.command()
+@log_timing(logger)
+def evaluate_cli(
+    run_id: Annotated[str, typer.Option(help="id of the specific run to load from")] = None,
+    dataset_loc: Annotated[str, typer.Option(help="dataset (with labels) to evaluate on")] = None,
+    results_fp: Annotated[str, typer.Option(help="location to save evaluation results to")] = None,
+):
+    return evaluate(run_id=run_id, dataset_loc=dataset_loc, results_fp=results_fp)

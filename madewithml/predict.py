@@ -68,6 +68,7 @@ class TorchPredictor:
 
     @classmethod
     def from_checkpoint(cls, checkpoint):
+        logger.info("Loading predictor from checkpoint", extra={"extra_data": {"checkpoint_path": checkpoint.path}})
         metadata = checkpoint.get_metadata()
         preprocessor = CustomPreprocessor(class_to_index=metadata["class_to_index"])
         model = FinetunedLLM.load(Path(checkpoint.path, "args.json"), Path(checkpoint.path, "model.pt"))
@@ -99,7 +100,9 @@ def predict_proba(
 
 
 @app.command()
-def get_best_run_id(experiment_name: str = "", metric: str = "", mode: str = "") -> str:  # pragma: no cover, mlflow logic
+def get_best_run_id(
+    experiment_name: str = "", metric: str = "", mode: str = ""
+) -> str:  # pragma: no cover, mlflow logic
     """Get the best run_id from an MLflow experiment.
 
     Args:
@@ -154,9 +157,13 @@ def predict(
     predictor = TorchPredictor.from_checkpoint(best_checkpoint)
 
     # Predict
+    logger.info(
+        f"Predicting: title='{title[:50]}...' " if len(title) > 50 else f"Predicting: title='{title}'",
+        extra={"extra_data": {"run_id": run_id, "title": title, "description_length": len(description)}},
+    )
     sample_ds = ray.data.from_items([{"title": title, "description": description, "tag": "other"}])
     results = predict_proba(ds=sample_ds, predictor=predictor)
-    logger.info(json.dumps(results, cls=NumpyEncoder, indent=2))
+    logger.info(json.dumps(results, cls=NumpyEncoder, indent=2), extra={"extra_data": {"results": results}})
     return results
 
 

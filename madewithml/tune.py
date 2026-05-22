@@ -5,12 +5,15 @@ import os
 import ray
 import typer
 from ray import tune
-from ray.air.config import (
-    CheckpointConfig,
-    DatasetConfig,
-    RunConfig,
-    ScalingConfig,
-)
+
+try:
+    from ray.air.config import CheckpointConfig, RunConfig, ScalingConfig
+except ImportError:
+    from ray.train import CheckpointConfig, RunConfig, ScalingConfig
+try:
+    from ray.air.config import DatasetConfig
+except ImportError:
+    DatasetConfig = None
 from ray.air.integrations.mlflow import MLflowLoggerCallback
 from ray.train.torch import TorchTrainer
 from ray.tune import Tuner
@@ -21,12 +24,14 @@ from typing_extensions import Annotated
 
 from madewithml import data, train, utils
 from madewithml.config import EFS_DIR, MLFLOW_TRACKING_URI, logger
+from madewithml.log_utils import log_config, log_timing
 
 # Initialize Typer CLI app
 app = typer.Typer()
 
 
 @app.command()
+@log_timing(logger)
 def tune_models(
     experiment_name: Annotated[str, typer.Option(help="name of the experiment for this training workload.")] = None,
     dataset_loc: Annotated[str, typer.Option(help="location of the dataset.")] = None,
@@ -67,6 +72,10 @@ def tune_models(
     train_loop_config["num_samples"] = num_samples
     train_loop_config["num_epochs"] = num_epochs
     train_loop_config["batch_size"] = batch_size
+    logger.info(
+        f"Starting tuning: experiment={experiment_name}, runs={num_runs}",
+        extra={"extra_data": {"experiment_name": experiment_name, "num_runs": num_runs, "num_workers": num_workers}},
+    )
 
     # Scaling config
     scaling_config = ScalingConfig(
@@ -82,10 +91,12 @@ def tune_models(
     train_loop_config["num_classes"] = len(tags)
 
     # Dataset config
-    dataset_config = {
-        "train": DatasetConfig(fit=False, transform=False, randomize_block_order=False),
-        "val": DatasetConfig(fit=False, transform=False, randomize_block_order=False),
-    }
+    dataset_config = {}
+    if DatasetConfig is not None:
+        dataset_config = {
+            "train": DatasetConfig(fit=False, transform=False, randomize_block_order=False),
+            "val": DatasetConfig(fit=False, transform=False, randomize_block_order=False),
+        }
 
     # Preprocess
     preprocessor = data.CustomPreprocessor()
@@ -118,7 +129,9 @@ def tune_models(
         experiment_name=experiment_name,
         save_artifact=True,
     )
-    run_config = RunConfig(callbacks=[mlflow_callback], checkpoint_config=checkpoint_config, storage_path=EFS_DIR, local_dir=EFS_DIR)
+    run_config = RunConfig(
+        callbacks=[mlflow_callback], checkpoint_config=checkpoint_config, storage_path=EFS_DIR, local_dir=EFS_DIR
+    )
 
     # Hyperparameters to start with
     initial_params = json.loads(initial_params)
@@ -149,6 +162,7 @@ def tune_models(
         scheduler=scheduler,
         num_samples=num_runs,
     )
+    log_config({"param_space": {k: str(v) for k, v in param_space["train_loop_config"].items()}}, name="tuning")
 
     # Tuner
     tuner = Tuner(
@@ -161,9 +175,10 @@ def tune_models(
     # Tune
     results = tuner.fit()
     best_trial = results.get_best_result(metric="val_loss", mode="min")
+    best_run_id = utils.get_run_id(experiment_name=experiment_name, trial_id=best_trial.metrics["trial_id"])
     d = {
         "timestamp": datetime.datetime.now().strftime("%B %d, %Y %I:%M:%S %p"),
-        "run_id": utils.get_run_id(experiment_name=experiment_name, trial_id=best_trial.metrics["trial_id"]),
+        "run_id": best_run_id,
         "params": best_trial.config["train_loop_config"],
         "metrics": utils.dict_to_list(best_trial.metrics_dataframe.to_dict(), keys=["epoch", "train_loss", "val_loss"]),
     }

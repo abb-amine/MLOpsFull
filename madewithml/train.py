@@ -27,6 +27,7 @@ from typing_extensions import Annotated
 
 from madewithml import data, utils
 from madewithml.config import EFS_DIR, MLFLOW_TRACKING_URI, logger
+from madewithml.log_utils import log_config, log_timing
 from madewithml.models import FinetunedLLM
 
 # Initialize Typer CLI app
@@ -66,6 +67,27 @@ def train_step(
         optimizer.step()  # update weights
         loss += (J.detach().item() - loss) / (i + 1)  # cumulative loss
     return loss
+
+
+def log_epoch_metrics(
+    epoch: int,
+    num_epochs: int,
+    train_loss: float,
+    val_loss: float,
+    lr: float,
+) -> None:
+    logger.info(
+        f"Epoch {epoch + 1}/{num_epochs} | train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | lr={lr:.6f}",
+        extra={
+            "extra_data": {
+                "epoch": epoch + 1,
+                "num_epochs": num_epochs,
+                "train_loss": round(train_loss, 4),
+                "val_loss": round(val_loss, 4),
+                "lr": lr,
+            }
+        },
+    )
 
 
 def eval_step(
@@ -126,7 +148,9 @@ def train_loop_per_worker(config: dict) -> None:  # pragma: no cover, tested via
     # Training components
     loss_fn = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=lr_factor, patience=lr_patience)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=lr_factor, patience=lr_patience
+    )
 
     # Training
     num_workers = train.get_context().get_world_size()
@@ -136,6 +160,18 @@ def train_loop_per_worker(config: dict) -> None:  # pragma: no cover, tested via
         train_loss = train_step(train_ds, batch_size_per_worker, model, num_classes, loss_fn, optimizer)
         val_loss, _, _ = eval_step(val_ds, batch_size_per_worker, model, num_classes, loss_fn)
         scheduler.step(val_loss)
+
+        # Log epoch metrics
+        log_epoch_metrics(epoch, num_epochs, train_loss, val_loss, optimizer.param_groups[0]["lr"])
+
+        # MLflow logging per epoch
+        import mlflow
+
+        if mlflow.active_run():
+            mlflow.log_metrics(
+                {"train_loss": train_loss, "val_loss": val_loss},
+                step=epoch,
+            )
 
         # Checkpoint
         with tempfile.TemporaryDirectory() as dp:
@@ -149,6 +185,7 @@ def train_loop_per_worker(config: dict) -> None:  # pragma: no cover, tested via
 
 
 @app.command()
+@log_timing(logger)
 def train_model(
     experiment_name: Annotated[str, typer.Option(help="name of the experiment for this training workload.")] = None,
     dataset_loc: Annotated[str, typer.Option(help="location of the dataset.")] = None,
@@ -186,6 +223,17 @@ def train_model(
     train_loop_config["num_samples"] = num_samples
     train_loop_config["num_epochs"] = num_epochs
     train_loop_config["batch_size"] = batch_size
+    log_config(train_loop_config, name="training")
+    logger.info(
+        f"Starting training: experiment={experiment_name}, workers={num_workers}",
+        extra={
+            "extra_data": {
+                "experiment_name": experiment_name,
+                "num_workers": num_workers,
+                "gpu_per_worker": gpu_per_worker,
+            }
+        },  # noqa: E501
+    )
 
     # Scaling config
     scaling_config = ScalingConfig(
@@ -209,7 +257,9 @@ def train_model(
     )
 
     # Run config
-    run_config = RunConfig(callbacks=[mlflow_callback], checkpoint_config=checkpoint_config, storage_path=EFS_DIR, local_dir=EFS_DIR)
+    run_config = RunConfig(
+        callbacks=[mlflow_callback], checkpoint_config=checkpoint_config, storage_path=EFS_DIR, local_dir=EFS_DIR
+    )
 
     # Dataset
     ds = data.load_data(dataset_loc=dataset_loc, num_samples=train_loop_config["num_samples"])
@@ -242,9 +292,10 @@ def train_model(
 
     # Train
     results = trainer.fit()
+    run_id = utils.get_run_id(experiment_name=experiment_name, trial_id=results.metrics["trial_id"])
     d = {
         "timestamp": datetime.datetime.now().strftime("%B %d, %Y %I:%M:%S %p"),
-        "run_id": utils.get_run_id(experiment_name=experiment_name, trial_id=results.metrics["trial_id"]),
+        "run_id": run_id,
         "params": results.config["train_loop_config"],
         "metrics": utils.dict_to_list(results.metrics_dataframe.to_dict(), keys=["epoch", "train_loss", "val_loss"]),
     }
