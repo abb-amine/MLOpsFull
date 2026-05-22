@@ -10,7 +10,8 @@ pipeline {
             steps {
                 checkout scm
                 sh 'pip install --upgrade pip --break-system-packages'
-                sh 'pip install --retries 5 --timeout 180 --trusted-host download.pytorch.org -r requirements.txt --break-system-packages'
+                sh 'pip install --retries 5 --timeout 180 -r requirements.txt --break-system-packages'
+                sh 'pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu --trusted-host download.pytorch.org --break-system-packages'
                 sh 'pip install -e . pytest-cov flake8 black isort --break-system-packages'
             }
         }
